@@ -3,50 +3,118 @@
 #include <stdlib.h>
 #include <time.h>
 
-void Startpos(Board *b)
+typedef struct
 {
-  b->turn                 = WHITE;
-  b->piece[WHITE][PAWN]   = 0xff00;
-  b->piece[BLACK][PAWN]   = 0xff000000000000;
-  b->piece[WHITE][KNIGHT] = 0x42;
-  b->piece[BLACK][KNIGHT] = 0x4200000000000000;
-  b->piece[WHITE][ROOK]   = 0x81;
-  b->piece[BLACK][ROOK]   = 0x8100000000000000;
-  b->piece[WHITE][QUEEN]  = 0x8;
-  b->piece[BLACK][QUEEN]  = 0x800000000000000;
-  b->piece[WHITE][BISHOP] = 0x24;
-  b->piece[BLACK][BISHOP] = 0x2400000000000000;
-  b->piece[WHITE][KING]   = 0x10;
-  b->piece[BLACK][KING]   = 0x1000000000000000;
+  int total;
+  int eps;
+  int castles;
+  int promotions;
+  int captures;
+} PerftResult;
 
-  b->pieces_of[WHITE] = 0xffff;
-  b->pieces_of[BLACK] = 0xffff000000000000;
+static void perft(Board *b, int depth, PerftResult *result)
+{
+  if (depth == 0) return;
 
-  b->all_pieces = 0xffff00000000ffff;
+  Move move_list[MAX_MOVES];
+  int  move_count;
 
-  b->ep_possible = 0;
+  Generate(b, b->turn, GEN_ALL, move_list, &move_count);
 
-  b->moves_count = 0;
+  for (int i = 0; i < move_count; i++)
+  {
+    MakeMove(b, move_list[i]);
+
+    if (!SquareAttackedBy(b, b->turn, ffsll(b->piece[!b->turn][KING]) - 1))
+    {
+      if (depth == 1)
+      {
+        result->total++;
+        switch (GET_TYPE(move_list[i]))
+        {
+          case MOVE_TYPE_EP:
+            result->eps++;
+            break;
+          case MOVE_TYPE_CASTLE_K:
+            result->castles++;
+            break;
+          case MOVE_TYPE_CASTLE_Q:
+            result->castles++;
+            break;
+          case MOVE_TYPE_CAPTURE:
+            result->captures++;
+            break;
+          case MOVE_TYPE_PROMOTION:
+            result->promotions++;
+            break;
+          case MOVE_TYPE_PROMOTION_WITH_CAPTURE:
+            result->promotions++;
+            result->captures++;
+            break;
+        }
+      }
+      perft(b, depth - 1, result);
+    }
+    UnmakeMove(b);
+  }
 }
 
-int main()
+static void runPerft(Board *b, int depth)
+{
+  PerftResult result;
+  memset(&result, 0, sizeof(PerftResult));
+
+  clock_t start = clock();
+  perft(b, depth, &result);
+  printf("Perft(%d):\ntotal:%d\neps:%d\ncaptures:%d\ncastles:%d\npromotions:%d\n\n\n", depth,
+         result.total, result.eps, result.captures, result.castles, result.promotions);
+  clock_t end = clock();
+
+  double time = (double)(end - start) / CLOCKS_PER_SEC;
+  long   nps  = result.total / time;
+
+  printf("Nodes per second: %ld\n\n\n", nps);
+}
+
+static void runPerftDiv(Board *b, int depth)
+{
+  Move move_list[MAX_MOVES];
+  int  move_count;
+
+  Generate(b, b->turn, GEN_ALL, move_list, &move_count);
+
+  int total = 0;
+
+  for (int i = 0; i < move_count; i++)
+  {
+    MakeMove(b, move_list[i]);
+
+    if (!SquareAttackedBy(b, b->turn, ffsll(b->piece[!b->turn][KING]) - 1))
+    {
+      PerftResult result;
+      memset(&result, 0, sizeof(PerftResult));
+
+      perft(b, depth - 1, &result);
+
+      total += result.total;
+
+      char buff[6];
+      PrintMoveStr(buff, move_list[i]);
+      printf("%d - %s: %d\n", i, buff, result.total);
+    }
+
+    UnmakeMove(b);
+  }
+
+  printf("\nNodes searched: %d\n", total);
+}
+int main(int argc, char *argv[])
 {
   Board b;
-
   Startpos(&b);
 
-  Generate(&b, WHITE, GEN_ALL);
-  /*srand(time(NULL));
+  Move move_list[MAX_MOVES];
+  int  move_count;
 
-  const BB  blockers = 0x20000102000;
-  const int n        = 27;
-
-  printf("0x%llx\n", precomp_bishop_moves[n][(blockers * precomp_bishop_magic[n]) >> (64 - 9)]);*/
-
-  /*
-      const BB  blockers = 0x40400100000;
-      const int n        = 18;
-
-      printf("0x%llx\n", precomp_bishop_moves[n][(blockers * precomp_bishop_magic[n]) >> (64 -
-      12)]);*/
+  runPerft(&b, atoi(argv[1]));
 }

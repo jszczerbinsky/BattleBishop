@@ -18,6 +18,9 @@
 #define BISHOP 4
 #define KING   5
 
+#define CASTLE_K 1
+#define CASTLE_Q 2
+
 //
 // Ranks, files, diags
 //
@@ -88,7 +91,6 @@ typedef unsigned long Move;
 
 typedef struct
 {
-  Move          move;
   int           ep_possible;
   BB            ep_square;
   unsigned char castle[2];
@@ -129,10 +131,20 @@ extern const BB precomp_rook_moves[64][4096];
 extern const BB precomp_bishop_blocker_mask[64];
 extern const BB precomp_bishop_magic[64];
 extern const BB precomp_bishop_moves[64][512];
+extern const BB precomp_in_between[64][64];
 
 //
 // Functions
 //
-void Generate(Board *b, int side, int type);
+void Startpos(Board *b);
+void FEN(Board *b, char *str);
+int  SquareAttackedBy(Board *b, int side, int sq);
+int  GetPieceAt(Board *b, BB s);
+void PrintMoveStr(char buff[], Move m);
+void MakeMove(Board *b, Move m);
+void UnmakeMove(Board *b);
+void PrintBoard(Board *b);
+
+void Generate(Board *b, int side, int type, Move move_list[], int *move_count);
 
 #endif

@@ -342,18 +342,6 @@ static void genCastles(Board *b, Move *move_list, int *move_count, int side)
   }
 }
 
-static int popcnt(BB b)
-{
-  int sq;
-  int i = 0;
-  while ((sq = ffsll(b)) != 0)
-  {
-    i++;
-    b &= ~SQ_TO_BB(sq - 1);
-  };
-  return i;
-}
-
 void Generate(Board *b, int side, int type, Move move_list[], int *move_count)
 {
   *move_count = 0;

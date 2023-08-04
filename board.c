@@ -6,12 +6,12 @@ int SquareAttackedBy(Board *b, int side, int sq)
 
   if (side == WHITE)
   {
-    if (((((sq_bb & ~FILE_A) >> 7) | ((sq_bb & ~FILE_H) >> 9)) & b->piece[side][PAWN]) != 0)
+    if (((((sq_bb & ~FILE_H) >> 7) | ((sq_bb & ~FILE_A) >> 9)) & b->piece[side][PAWN]) != 0)
       return 1;
   }
   else
   {
-    if (((((sq_bb & ~FILE_A) << 9) | ((sq_bb & ~FILE_H) << 7)) & b->piece[side][PAWN]) != 0)
+    if (((((sq_bb & ~FILE_H) << 9) | ((sq_bb & ~FILE_A) << 7)) & b->piece[side][PAWN]) != 0)
       return 1;
   }
   if ((precomp_knight_moves[sq] & b->piece[side][KNIGHT]) != 0) return 1;
@@ -28,6 +28,20 @@ int SquareAttackedBy(Board *b, int side, int sq)
     return 1;
 
   return 0;
+}
+
+int IsKingAttacked(Board *b, int side)
+{
+  return SquareAttackedBy(b, !side, ffsll(b->piece[side][KING]) - 1);
+}
+
+int IsLegal(Board *b, Move m)
+{
+  MakeMove(b, m);
+  int legal = !IsKingAttacked(b, !b->turn);
+  UnmakeMove(b);
+
+  return legal;
 }
 
 void Startpos(Board *b)
@@ -177,6 +191,14 @@ int GetPieceAt(Board *b, BB s)
   return 0;
 }
 
+int PieceToHashIndex(int piece, int player)
+{
+  if (player == BLACK)
+    return piece + 6;
+  else
+    return piece;
+}
+
 void PrintMoveStr(char buff[], Move m)
 {
   if (GET_TYPE(m) == MOVE_TYPE_CASTLE_K)
@@ -240,6 +262,23 @@ static void updateBitboards(Board *b)
     for (int j = 0; j < 6; j++) b->pieces_of[i] |= b->piece[i][j];
 
   b->all_pieces = b->pieces_of[WHITE] | b->pieces_of[BLACK];
+
+  b->hash_value = 0;
+  for (int i = 0; i < 2; i++)
+  {
+    for (int j = 0; j < 64; j++)
+    {
+      BB sq_bb = SQ_TO_BB(j);
+      if ((sq_bb & b->pieces_of[i]) != 0)
+        b->hash_value ^= precomp_hash[j][PieceToHashIndex(GetPieceAt(b, sq_bb), i)];
+    }
+
+    if (b->castle[i] & CASTLE_K) b->hash_value ^= precomp_hash_castle[i][CASTLE_K - 1];
+    if (b->castle[i] & CASTLE_Q) b->hash_value ^= precomp_hash_castle[i][CASTLE_Q - 1];
+  }
+
+  b->hash_value ^= precomp_hash_turn[b->turn];
+  if (b->ep_possible) b->hash_value ^= precomp_hash_ep[ffsll(b->ep_square) - 1];
 }
 
 static void updateCastlingAfterCapture(Board *b, BB dest_bb)
@@ -271,6 +310,7 @@ void MakeMove(Board *b, Move m)
   b->state_backup[b->moves_count].castle[WHITE] = b->castle[WHITE];
   b->state_backup[b->moves_count].castle[BLACK] = b->castle[BLACK];
   b->state_backup[b->moves_count].halfmove      = b->halfmove;
+  b->state_backup[b->moves_count].hash_value    = b->hash_value;
 
   b->moves_count++;
 
@@ -387,6 +427,7 @@ void UnmakeMove(Board *b)
   b->castle[WHITE] = b->state_backup[b->moves_count].castle[WHITE];
   b->castle[BLACK] = b->state_backup[b->moves_count].castle[BLACK];
   b->halfmove      = b->state_backup[b->moves_count].halfmove;
+  b->hash_value    = b->state_backup[b->moves_count].hash_value;
 
   b->ep_possible = 0;
 

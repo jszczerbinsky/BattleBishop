@@ -95,6 +95,7 @@ typedef struct
   BB            ep_square;
   unsigned char castle[2];
   int           halfmove;
+  BB            hash_value;
 } BoardStateBackup;
 
 typedef struct
@@ -113,10 +114,21 @@ typedef struct
   int ep_possible;
   BB  ep_square;
 
+  BB hash_value;
+
   int              moves_count;
   Move             moves[MAX_MOVES];
   BoardStateBackup state_backup[MAX_MOVES];
 } Board;
+
+typedef struct
+{
+  int total;
+  int eps;
+  int castles;
+  int promotions;
+  int captures;
+} PerftResult;
 
 //
 // Precomputed values
@@ -132,6 +144,10 @@ extern const BB precomp_bishop_blocker_mask[64];
 extern const BB precomp_bishop_magic[64];
 extern const BB precomp_bishop_moves[64][512];
 extern const BB precomp_in_between[64][64];
+extern const BB precomp_hash[64][12];
+extern const BB precomp_hash_castle[2][2];
+extern const BB precomp_hash_turn[2];
+extern const BB precomp_hash_ep[64];
 
 //
 // Functions
@@ -139,6 +155,8 @@ extern const BB precomp_in_between[64][64];
 void Startpos(Board *b);
 void FEN(Board *b, char *str);
 int  SquareAttackedBy(Board *b, int side, int sq);
+int  IsKingAttacked(Board *b, int side);
+int  IsLegal(Board *b, Move m);
 int  GetPieceAt(Board *b, BB s);
 void PrintMoveStr(char buff[], Move m);
 void MakeMove(Board *b, Move m);
@@ -146,5 +164,10 @@ void UnmakeMove(Board *b);
 void PrintBoard(Board *b);
 
 void Generate(Board *b, int side, int type, Move move_list[], int *move_count);
+
+void RunPerft(Board *b, int depth);
+void RunPerftDiv(Board *b, int depth);
+
+Move Search(Board *b);
 
 #endif

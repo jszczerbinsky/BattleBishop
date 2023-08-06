@@ -3,16 +3,13 @@
 
 #include "main.h"
 
-#define TT_SIZE (1024 * 1024)
+#define TT_SIZE (1024)
 
 typedef struct
 {
   Move plies[MAX_MOVES];
   int  plies_count;
 } Variation;
-
-#define MATE_SCORE     9999999999.9
-#define MATE_SCORE_MIN 99999999.9
 
 #define TTENTRY_EXACT      0
 #define TTENTRY_LOWERBOUND 1
@@ -74,30 +71,67 @@ float Evaluate(Board *b)
   return total * who2move[b->turn];
 }
 
-static void orderMoves(Move *moves, int moves_count, Move pv_move)
+static void orderMoves(Move *moves, int moves_count, Move pv_move, int j)
 {
-  for (int i = 0; i < moves_count; i++)
-    if (moves[i] == pv_move)
+  int best_order_score = -99999999;
+  int best_i           = j;
+
+  for (int i = j; i < moves_count; i++)
+    if (j == 0 && pv_move != NULL_MOVE && moves[i] == pv_move)
     {
-      Move tmp = moves[0];
-      moves[0] = moves[i];
-      moves[i] = tmp;
+      best_i = i;
+      break;
     }
+    else
+    {
+      int order_score;
+      switch (GET_TYPE(moves[i]))
+      {
+        case MOVE_TYPE_EP:
+          order_score = GET_CAPTURED_PIECE(moves[i]) - 1;
+          break;
+        case MOVE_TYPE_CAPTURE:
+          order_score = GET_CAPTURED_PIECE(moves[i]) - GET_PIECE(moves[i]);
+          break;
+        case MOVE_TYPE_PROMOTION:
+          order_score = GET_PROMOTION_PIECE(moves[i]) - 1;
+          break;
+        case MOVE_TYPE_PROMOTION_WITH_CAPTURE:
+          order_score = GET_PROMOTION_PIECE(moves[i]) + GET_CAPTURED_PIECE(moves[i]) -
+                        GET_PIECE(moves[i]) - 1;
+          break;
+        default:
+          order_score = -100;
+          break;
+      }
+      if (order_score > best_order_score)
+      {
+        best_order_score = order_score;
+        best_i           = i;
+      }
+    }
+
+  Move tmp      = moves[j];
+  moves[j]      = moves[best_i];
+  moves[best_i] = tmp;
 }
 
 static float alphaBeta(Board *b, float alpha, float beta, int depthleft, Variation *variation,
-                       Move *best_move)
+                       Move *best_move, Variation *pv)
 {
   float original_alpha = alpha;
 
+  Variation child_pv;
+  child_pv.plies_count = 0;
+
   if (depthleft == 0)
   {
-    float score = Evaluate(b);
-    return score;
+    pv->plies_count = 0;
+    return Evaluate(b);
   }
 
   // Only silents moves on leaves
-  int move_type = /*depthleft == 1 ? GEN_SILENT :*/ GEN_ALL;
+  int move_type = depthleft == 1 ? GEN_SILENT : GEN_ALL;
 
   Move moves[MAX_MOVES];
   int  moves_count;
@@ -133,15 +167,20 @@ static float alphaBeta(Board *b, float alpha, float beta, int depthleft, Variati
   else
   {
     Generate(b, b->turn, move_type, moves, &moves_count);
-    pv_move = moves[0];
+    pv_move = NULL_MOVE;
   }
 
   int legal_found = 0;
 
-  orderMoves(moves, moves_count, pv_move);
-
   for (int i = 0; i < moves_count; i++)
   {
+    orderMoves(moves, moves_count, pv_move, i);
+
+    /*if ((GET_TYPE(moves[i]) == MOVE_TYPE_CAPTURE ||
+         GET_TYPE(moves[i]) == MOVE_TYPE_PROMOTION_WITH_CAPTURE) &&
+        GET_CAPTURED_PIECE(moves[i] == KING))
+      return MATE_SCORE;*/
+
     if (IsLegal(b, moves[i]))
     {
       legal_found++;
@@ -150,16 +189,19 @@ static float alphaBeta(Board *b, float alpha, float beta, int depthleft, Variati
       variation->plies[variation->plies_count] = moves[i];
       variation->plies_count++;
 
-      float score = -alphaBeta(b, -beta, -alpha, depthleft - 1, variation, NULL);
+      float score = -alphaBeta(b, -beta, -alpha, depthleft - 1, variation, NULL, &child_pv);
 
       variation->plies_count--;
       UnmakeMove(b);
 
-      if (score >= beta) return score;
-      if (score > alpha)
+      if (score >= alpha)
       {
         pv_move = moves[i];
         alpha   = score;
+
+        pv->plies_count = child_pv.plies_count + 1;
+        pv->plies[0]    = moves[i];
+        for (int i = 0; i < child_pv.plies_count; i++) pv->plies[i + 1] = child_pv.plies[i];
 
         if (best_move != NULL)
         {
@@ -167,13 +209,14 @@ static float alphaBeta(Board *b, float alpha, float beta, int depthleft, Variati
           pv_move    = moves[i];
         }
       }
+      if (alpha >= beta) return score;
     }
   }
 
   if (legal_found == 0)
   {
     if (IsKingAttacked(b, b->turn))
-      alpha = -MATE_SCORE;
+      alpha = -INFINITY;
     else
       alpha = 0;
   }
@@ -206,14 +249,20 @@ Move Search(Board *b)
     Variation variation;
     variation.plies_count = 0;
 
+    Variation pv;
+
     Move  m     = 0;
-    float score = alphaBeta(b, -INFINITY, INFINITY, depth, &variation, &m);
+    float score = alphaBeta(b, -INFINITY, INFINITY, depth, &variation, &m, &pv);
 
     char buff[6];
     PrintMoveStr(buff, m);
     printf("Best at depth %d: %s, (score: %f)\n", depth, buff, score);
 
-    if (score >= MATE_SCORE_MIN)
+    printf("PV: ");
+    printVariation(&pv);
+    putchar('\n');
+
+    if (score == INFINITY)
     {
       printf("Mate\n");
       break;

@@ -9,5 +9,9 @@ int main(int argc, char *argv[])
   // Startpos(&b);
   FEN(&b, argv[1]);
 
+  clock_t start = clock();
   Search(&b);
+  clock_t end = clock();
+
+  printf("Total time: %ld\n", (end - start) / CLOCKS_PER_SEC);
 }

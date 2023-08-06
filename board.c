@@ -44,6 +44,34 @@ int IsLegal(Board *b, Move m)
   return legal;
 }
 
+static void updateBitboards(Board *b)
+{
+  b->pieces_of[WHITE] = 0;
+  b->pieces_of[BLACK] = 0;
+
+  for (int i = 0; i < 2; i++)
+    for (int j = 0; j < 6; j++) b->pieces_of[i] |= b->piece[i][j];
+
+  b->all_pieces = b->pieces_of[WHITE] | b->pieces_of[BLACK];
+
+  b->hash_value = 0;
+  for (int i = 0; i < 2; i++)
+  {
+    for (int j = 0; j < 64; j++)
+    {
+      BB sq_bb = SQ_TO_BB(j);
+      if ((sq_bb & b->pieces_of[i]) != 0)
+        b->hash_value ^= precomp_hash[j][PieceToHashIndex(GetPieceAt(b, sq_bb), i)];
+    }
+
+    if (b->castle[i] & CASTLE_K) b->hash_value ^= precomp_hash_castle[i][CASTLE_K - 1];
+    if (b->castle[i] & CASTLE_Q) b->hash_value ^= precomp_hash_castle[i][CASTLE_Q - 1];
+  }
+
+  b->hash_value ^= precomp_hash_turn[b->turn];
+  if (b->ep_possible) b->hash_value ^= precomp_hash_ep[ffsll(b->ep_square) - 1];
+}
+
 void Startpos(Board *b)
 {
   b->turn                 = WHITE;
@@ -74,6 +102,8 @@ void Startpos(Board *b)
   b->ep_possible = 0;
 
   b->moves_count = 0;
+
+  updateBitboards(b);
 }
 
 void FEN(Board *b, char *str)
@@ -179,6 +209,8 @@ void FEN(Board *b, char *str)
     str++;
   }
   str += 2;
+
+  updateBitboards(b);
 }
 
 int GetPieceAt(Board *b, BB s)
@@ -251,34 +283,6 @@ void PrintBoard(Board *b)
   if (b->ep_possible)
     printf("Ep square: %c%c\n", (ffsll(b->ep_square) - 1) % 8 + 'a',
            (ffsll(b->ep_square) - 1) / 8 + '1');
-}
-
-static void updateBitboards(Board *b)
-{
-  b->pieces_of[WHITE] = 0;
-  b->pieces_of[BLACK] = 0;
-
-  for (int i = 0; i < 2; i++)
-    for (int j = 0; j < 6; j++) b->pieces_of[i] |= b->piece[i][j];
-
-  b->all_pieces = b->pieces_of[WHITE] | b->pieces_of[BLACK];
-
-  b->hash_value = 0;
-  for (int i = 0; i < 2; i++)
-  {
-    for (int j = 0; j < 64; j++)
-    {
-      BB sq_bb = SQ_TO_BB(j);
-      if ((sq_bb & b->pieces_of[i]) != 0)
-        b->hash_value ^= precomp_hash[j][PieceToHashIndex(GetPieceAt(b, sq_bb), i)];
-    }
-
-    if (b->castle[i] & CASTLE_K) b->hash_value ^= precomp_hash_castle[i][CASTLE_K - 1];
-    if (b->castle[i] & CASTLE_Q) b->hash_value ^= precomp_hash_castle[i][CASTLE_Q - 1];
-  }
-
-  b->hash_value ^= precomp_hash_turn[b->turn];
-  if (b->ep_possible) b->hash_value ^= precomp_hash_ep[ffsll(b->ep_square) - 1];
 }
 
 static void updateCastlingAfterCapture(Board *b, BB dest_bb)

@@ -3,11 +3,32 @@
 
 #include "main.h"
 
+#define TT_SIZE (1024 * 1024)
+
 typedef struct
 {
   Move plies[MAX_MOVES];
   int  plies_count;
 } Variation;
+
+#define MATE_SCORE     9999999999.9
+#define MATE_SCORE_MIN 99999999.9
+
+#define TTENTRY_EXACT      0
+#define TTENTRY_LOWERBOUND 1
+#define TTENTRY_UPPERBOUND 2
+
+typedef struct
+{
+  unsigned char occupied;
+  BB            hash;
+  unsigned char depth;
+  Move          pv_move;
+  Move          moves[MAX_MOVES];
+  int           moves_count;
+  float         score;
+  unsigned char entry_type;
+} TTEntry;
 
 static const int piece_value[6] = {
     100,  // Pawn
@@ -16,6 +37,8 @@ static const int piece_value[6] = {
     900,  // Queen
     300,  // Bishop
 };
+
+TTEntry tt[TT_SIZE];
 
 static void printVariation(Variation *variation)
 {
@@ -51,112 +74,83 @@ float Evaluate(Board *b)
   return total * who2move[b->turn];
 }
 
-static void selectNextMove(int i, Move *move_list, int *order_score, int move_count)
+static void orderMoves(Move *moves, int moves_count, Move pv_move)
 {
-  int min = i;
-  for (int j = i + 1; j < move_count; j++)
-    if (order_score[j] < order_score[min]) min = j;
-
-  if (min != i)
-  {
-    Move tmp       = move_list[i];
-    move_list[i]   = move_list[min];
-    move_list[min] = tmp;
-    ;
-  }
-}
-
-static void assignMoveOrderScore(Move *move_list, int *order_score, int move_count,
-                                 Variation *variation, Variation *pv)
-{
-  int  is_pv;
-  Move pv_move;
-
-  if (pv->plies_count == 0)
-    is_pv = 0;
-  else
-  {
-    is_pv = 1;
-    for (int i = 0; i < variation->plies_count; i++)
-      if (pv->plies[i] != variation->plies[i])
-      {
-        is_pv = 0;
-        break;
-      }
-    if (is_pv) pv_move = pv->plies[variation->plies_count];
-  }
-
-  for (int i = 0; i < move_count; i++)
-  {
-    if (is_pv && move_list[i] == pv_move)
-      order_score[i] = 10000;
-    else
+  for (int i = 0; i < moves_count; i++)
+    if (moves[i] == pv_move)
     {
-      int score;
-
-      switch (GET_TYPE(move_list[i]))
-      {
-        case MOVE_TYPE_EP:
-          score = 1;
-          break;
-        case MOVE_TYPE_CAPTURE:
-          score = GET_CAPTURED_PIECE(move_list[i]) - GET_PIECE(move_list[i]);
-          break;
-        case MOVE_TYPE_PROMOTION:
-          score = GET_PROMOTION_PIECE(move_list[i]);
-          break;
-        case MOVE_TYPE_PROMOTION_WITH_CAPTURE:
-          score = GET_CAPTURED_PIECE(move_list[i]) + GET_PROMOTION_PIECE(move_list[i]);
-          break;
-        default:
-          score = 0;
-          break;
-      }
-
-      order_score[i] = score;
+      Move tmp = moves[0];
+      moves[0] = moves[i];
+      moves[i] = tmp;
     }
-  }
 }
 
-float alphaBeta(Board *b, float alpha, float beta, int depthleft, Variation *variation,
-                Variation *parent_pv, Variation *pv)
+static float alphaBeta(Board *b, float alpha, float beta, int depthleft, Variation *variation,
+                       Move *best_move)
 {
-  Variation child_pv;
-  child_pv.plies_count = 0;
+  float original_alpha = alpha;
 
   if (depthleft == 0)
   {
-    float score            = Evaluate(b);
-    parent_pv->plies_count = 0;
+    float score = Evaluate(b);
     return score;
   }
 
   // Only silents moves on leaves
   int move_type = /*depthleft == 1 ? GEN_SILENT :*/ GEN_ALL;
 
-  Move move_list[MAX_MOVES];
-  int  order_score[MAX_MOVES];
-  int  move_count;
+  Move moves[MAX_MOVES];
+  int  moves_count;
 
-  Generate(b, b->turn, move_type, move_list, &move_count);
+  Move pv_move;
 
-  assignMoveOrderScore(move_list, order_score, move_count, variation, pv);
+  // Read from tt
+  TTEntry *ttEntry = tt + (b->hash_value % TT_SIZE);
+
+  if (ttEntry->occupied == 1 && ttEntry->hash == b->hash_value)
+  {
+    if (ttEntry->depth >= depthleft)
+    {
+      switch (ttEntry->entry_type)
+      {
+        case TTENTRY_EXACT:
+          return ttEntry->score;
+          break;
+        case TTENTRY_LOWERBOUND:
+          if (ttEntry->score < beta) beta = ttEntry->score;
+          break;
+        case TTENTRY_UPPERBOUND:
+          if (ttEntry->score > alpha) alpha = ttEntry->score;
+          break;
+      }
+
+      if (alpha > beta) return ttEntry->score;
+    }
+    moves_count = ttEntry->moves_count;
+    for (int i = 0; i < moves_count; i++) moves[i] = ttEntry->moves[i];
+    pv_move = tt->pv_move;
+  }
+  else
+  {
+    Generate(b, b->turn, move_type, moves, &moves_count);
+    pv_move = moves[0];
+  }
 
   int legal_found = 0;
 
-  for (int i = 0; i < move_count; i++)
-  {
-    selectNextMove(i, move_list, order_score, move_count);
+  orderMoves(moves, moves_count, pv_move);
 
-    if (IsLegal(b, move_list[i]))
+  for (int i = 0; i < moves_count; i++)
+  {
+    if (IsLegal(b, moves[i]))
     {
       legal_found++;
 
-      MakeMove(b, move_list[i]);
-      variation->plies[variation->plies_count] = move_list[i];
+      MakeMove(b, moves[i]);
+      variation->plies[variation->plies_count] = moves[i];
       variation->plies_count++;
 
-      float score = -alphaBeta(b, -beta, -alpha, depthleft - 1, variation, &child_pv, pv);
+      float score = -alphaBeta(b, -beta, -alpha, depthleft - 1, variation, NULL);
 
       variation->plies_count--;
       UnmakeMove(b);
@@ -164,102 +158,66 @@ float alphaBeta(Board *b, float alpha, float beta, int depthleft, Variation *var
       if (score >= beta) return score;
       if (score > alpha)
       {
-        alpha = score;
+        pv_move = moves[i];
+        alpha   = score;
 
-        parent_pv->plies[0] = move_list[i];
-        if (child_pv.plies_count > 0)
-          memcpy(parent_pv->plies + 1, child_pv.plies, child_pv.plies_count * sizeof(Move));
-        parent_pv->plies_count = child_pv.plies_count + 1;
+        if (best_move != NULL)
+        {
+          *best_move = moves[i];
+          pv_move    = moves[i];
+        }
       }
     }
   }
 
   if (legal_found == 0)
   {
-    float score = 0;
-
-    if (IsKingAttacked(b, b->turn)) score = -999999999.0;  // Infinity fails
-
-    parent_pv->plies_count = 0;
-
-    return score;
+    if (IsKingAttacked(b, b->turn))
+      alpha = -MATE_SCORE;
+    else
+      alpha = 0;
   }
+
+  // Save to tt
+  ttEntry->occupied    = 0;
+  ttEntry->depth       = depthleft;
+  ttEntry->hash        = b->hash_value;
+  ttEntry->moves_count = moves_count;
+  ttEntry->score       = alpha;
+  if (alpha <= original_alpha)
+    ttEntry->entry_type = TTENTRY_UPPERBOUND;
+  else if (alpha >= beta)
+    ttEntry->entry_type = TTENTRY_LOWERBOUND;
+  else
+    ttEntry->entry_type = TTENTRY_EXACT;
+  for (int i = 0; i < moves_count; i++) ttEntry->moves[i] = moves[i];
+  ttEntry->pv_move  = pv_move;
+  ttEntry->occupied = 1;
 
   return alpha;
 }
 
-Move searchRoot(Board *b, int depthleft, Variation *parent_pv, Variation *pv)
-{
-  Variation variation;
-  variation.plies_count = 0;
-
-  Variation child_pv;
-  child_pv.plies_count = 0;
-
-  Move move_list[MAX_MOVES];
-  int  order_score[MAX_MOVES];
-  int  move_count;
-
-  Generate(b, b->turn, GEN_ALL, move_list, &move_count);
-  assignMoveOrderScore(move_list, order_score, move_count, &variation, pv);
-
-  Move  best  = move_list[0];
-  float alpha = -INFINITY;
-  float beta  = INFINITY;
-
-  for (int i = 0; i < move_count; i++)
-  {
-    selectNextMove(i, move_list, order_score, move_count);
-
-    if (IsLegal(b, move_list[i]))
-    {
-      MakeMove(b, move_list[i]);
-      variation.plies[variation.plies_count] = move_list[i];
-      variation.plies_count++;
-
-      float score = -alphaBeta(b, -beta, -alpha, depthleft - 1, &variation, &child_pv, pv);
-
-      variation.plies_count--;
-      UnmakeMove(b);
-
-      if (score > alpha)
-      {
-        alpha = score;
-        best  = move_list[i];
-
-        parent_pv->plies[0] = move_list[i];
-        if (child_pv.plies_count > 0)
-          memcpy(parent_pv->plies + 1, child_pv.plies, child_pv.plies_count * sizeof(Move));
-        parent_pv->plies_count = child_pv.plies_count + 1;
-      }
-    }
-  }
-
-  return best;
-}
-
 Move Search(Board *b)
 {
-  Variation pv;
-  pv.plies_count = 0;
+  memset(tt, 0, TT_SIZE * sizeof(TTEntry));
 
-  for (int depth = 2; depth < 12; depth++)
+  for (int depth = 2; depth < 20; depth++)
   {
-    Variation child_pv;
-    child_pv.plies_count = 0;
+    Variation variation;
+    variation.plies_count = 0;
 
-    Move m = searchRoot(b, depth, &child_pv, &pv);
-
-    printVariation(&child_pv);
-    putchar('\n');
-    fflush(stdout);
+    Move  m     = 0;
+    float score = alphaBeta(b, -INFINITY, INFINITY, depth, &variation, &m);
 
     char buff[6];
     PrintMoveStr(buff, m);
-    printf("Best at depth %d: %s\n", depth, buff);
+    printf("Best at depth %d: %s, (score: %f)\n", depth, buff, score);
 
-    pv.plies_count = child_pv.plies_count;
-    memcpy(pv.plies, child_pv.plies, child_pv.plies_count * sizeof(Move));
+    if (score >= MATE_SCORE_MIN)
+    {
+      printf("Mate\n");
+      break;
+    }
   }
 
   return 0;

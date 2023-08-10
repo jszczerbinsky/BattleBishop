@@ -1,7 +1,12 @@
-#include <math.h>
 #include <stdio.h>
 
 #include "main.h"
+
+#define MAX_SCORE  2000000000
+#define MATE_SCORE 1000000000
+
+#define IS_WIN_MATE(s)  ((s) >= MATE_SCORE && (s) < MAX_SCORE)
+#define IS_LOSE_MATE(s) ((s) <= -MATE_SCORE && (s) > -MAX_SCORE)
 
 #define TT_SIZE (1024)
 
@@ -23,7 +28,7 @@ typedef struct
   Move          pv_move;
   Move          moves[MAX_MOVES];
   int           moves_count;
-  float         score;
+  int           score;
   unsigned char entry_type;
 } TTEntry;
 
@@ -59,7 +64,7 @@ static int popcnt(BB b)
   return i;
 }
 
-float Evaluate(Board *b)
+int Evaluate(Board *b)
 {
   int who2move[2] = {1, -1};
 
@@ -115,11 +120,11 @@ static void orderMoves(Move *moves, int moves_count, Move pv_move, int j)
   moves[j]      = moves[best_i];
   moves[best_i] = tmp;
 }
-static float quiesce(Board *b, float alpha, float beta)
+static int quiesce(Board *b, int alpha, int beta)
 {
-  float static_eval = Evaluate(b);
+  int static_eval = Evaluate(b);
 
-  if (static_eval >= alpha) alpha = static_eval;
+  if (static_eval > alpha) alpha = static_eval;
   if (alpha >= beta) return beta;
 
   Move moves[MAX_MOVES];
@@ -132,7 +137,7 @@ static float quiesce(Board *b, float alpha, float beta)
     if (IsLegal(b, moves[i]))
     {
       MakeMove(b, moves[i]);
-      float score = -quiesce(b, -beta, -alpha);
+      int score = -quiesce(b, -beta, -alpha);
       UnmakeMove(b);
 
       if (score >= alpha) alpha = score;
@@ -143,10 +148,10 @@ static float quiesce(Board *b, float alpha, float beta)
   return alpha;
 }
 
-static float alphaBeta(Board *b, float alpha, float beta, int depthleft, Variation *variation,
-                       Move *best_move, Variation *pv, Variation *previous_pv)
+static int alphaBeta(Board *b, int alpha, int beta, int depthleft, Variation *variation,
+                     Move *best_move, Variation *pv, Variation *previous_pv)
 {
-  float original_alpha = alpha;
+  int original_alpha = alpha;
 
   Variation child_pv;
   child_pv.plies_count = 0;
@@ -208,13 +213,13 @@ static float alphaBeta(Board *b, float alpha, float beta, int depthleft, Variati
       variation->plies[variation->plies_count] = moves[i];
       variation->plies_count++;
 
-      float score =
+      int score =
           -alphaBeta(b, -beta, -alpha, depthleft - 1, variation, NULL, &child_pv, previous_pv);
 
       variation->plies_count--;
       UnmakeMove(b);
 
-      if (score >= alpha)
+      if (score > alpha)
       {
         pv_move = moves[i];
         alpha   = score;
@@ -236,7 +241,7 @@ static float alphaBeta(Board *b, float alpha, float beta, int depthleft, Variati
   if (legal_found == 0)
   {
     if (IsKingAttacked(b, b->turn))
-      alpha = -INFINITY;
+      alpha = -MATE_SCORE - variation->plies_count;
     else
       alpha = 0;
 
@@ -276,23 +281,23 @@ Move Search(Board *b)
 
     Variation pv;
 
-    Move  m     = 0;
-    float score = alphaBeta(b, -INFINITY, INFINITY, depth, &variation, &m, &pv, &previous_pv);
+    Move m     = 0;
+    int  score = alphaBeta(b, -MAX_SCORE, MAX_SCORE, depth, &variation, &m, &pv, &previous_pv);
 
     char buff[6];
     PrintMoveStr(buff, m);
-    printf("Best at depth %d: %s, (score: %f)\n", depth, buff, score);
+    printf("Best at depth %d: %s, (score: %d)\n", depth, buff, score);
 
     printf("PV: ");
     printVariation(&pv);
     putchar('\n');
 
-    if (score == -INFINITY)
+    if (IS_LOSE_MATE(score))
     {
       printf("Mate in %d\n", -(pv.plies_count + 1) / 2);
       break;
     }
-    if (score == INFINITY)
+    if (IS_WIN_MATE(score))
     {
       printf("Mate in %d\n", (pv.plies_count + 1) / 2);
       break;

@@ -53,7 +53,7 @@
 
 #define GEN_SILENT     1
 #define GEN_ATTACKS    2
-#define GEN_PROMOTIONS 3
+#define GEN_PROMOTIONS 4
 #define GEN_ALL        (GEN_SILENT | GEN_ATTACKS | GEN_PROMOTIONS)
 
 #define MAX_MOVES 256

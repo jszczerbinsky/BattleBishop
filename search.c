@@ -223,6 +223,9 @@ static int alphaBeta(Board *b, int alpha, int beta, int depthleft, Variation *va
   int any_child_failed_high = 0;
   int reduced               = 0;
 
+  // Check extension
+  if (in_check) depthleft++;
+
   for (int i = 0; i < moves_count; i++)
   {
     orderMoves(moves, moves_count, pv_move, i);

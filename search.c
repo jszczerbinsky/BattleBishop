@@ -281,7 +281,7 @@ static int alphaBeta(Board *b, int alpha, int beta, int depthleft, Variation *va
   }
 
   // Save to tt
-  /*ttEntry->occupied    = 0;
+  ttEntry->occupied    = 0;
   ttEntry->depth       = depthleft;
   ttEntry->hash        = b->hash_value;
   ttEntry->moves_count = moves_count;
@@ -294,7 +294,7 @@ static int alphaBeta(Board *b, int alpha, int beta, int depthleft, Variation *va
     ttEntry->entry_type = TTENTRY_EXACT;
   for (int i = 0; i < moves_count; i++) ttEntry->moves[i] = moves[i];
   ttEntry->pv_move  = pv_move;
-  ttEntry->occupied = 1;*/
+  ttEntry->occupied = 1;
 
   return alpha;
 }

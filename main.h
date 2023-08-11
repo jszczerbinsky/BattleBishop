@@ -105,6 +105,12 @@ typedef struct
 
 typedef struct
 {
+  Move plies[MAX_MOVES];
+  int  plies_count;
+} Variation;
+
+typedef struct
+{
   int turn;
 
   BB piece[2][6];
@@ -121,8 +127,7 @@ typedef struct
 
   BB hash_value;
 
-  int              moves_count;
-  Move             moves[MAX_MOVES];
+  Variation        variation;
   BoardStateBackup state_backup[MAX_MOVES];
 } Board;
 
@@ -167,6 +172,8 @@ void PrintMoveStr(char buff[], Move m);
 void MakeMove(Board *b, Move m);
 void UnmakeMove(Board *b);
 void PrintBoard(Board *b);
+int  GetTotalMaterial(Board *b, int side);
+int  IsEndgmae(Board *b);
 
 void Generate(Board *b, int side, int type, Move move_list[], int *move_count);
 

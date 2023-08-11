@@ -1,11 +1,55 @@
 #include "main.h"
 
+static const int piece_value[6] = {
+    100,  // Pawn
+    300,  // Knight
+    500,  // Rook
+    900,  // Queen
+    300,  // Bishop
+};
+
 int PieceToHashIndex(int piece, int player)
 {
   if (player == BLACK)
     return piece + 6;
   else
     return piece;
+}
+
+static int popcnt(BB b)
+{
+  int sq;
+  int i = 0;
+  while ((sq = ffsll(b)) != 0)
+  {
+    i++;
+    b &= ~SQ_TO_BB(sq - 1);
+  };
+  return i;
+}
+
+int GetTotalMaterial(Board *b, int side)
+{
+  int total = 0;
+
+  for (int i = 0; i < 5; i++) total += popcnt(b->piece[side][i]) * piece_value[i];
+
+  return total;
+}
+
+int IsEndgmae(Board *b)
+{
+  int total_b = 0;
+  int total_w = 0;
+
+  // Max 3 pieces other than pawns and kings
+  for (int i = 1; i < 5; i++)
+  {
+    total_w += popcnt(b->piece[WHITE][i]);
+    total_b += popcnt(b->piece[BLACK][i]);
+  }
+
+  return total_w <= 3 && total_b <= 3;
 }
 
 int SquareAttackedBy(Board *b, int side, int sq)
@@ -110,7 +154,7 @@ void Startpos(Board *b)
 
   b->ep_possible = 0;
 
-  b->moves_count = 0;
+  b->variation.plies_count = 0;
 
   updateBitboards(b);
 }
@@ -311,15 +355,15 @@ static void updateCastlingAfterCapture(Board *b, BB dest_bb)
 
 void MakeMove(Board *b, Move m)
 {
-  b->moves[b->moves_count]                      = m;
-  b->state_backup[b->moves_count].ep_possible   = b->ep_possible;
-  b->state_backup[b->moves_count].ep_square     = b->ep_square;
-  b->state_backup[b->moves_count].castle[WHITE] = b->castle[WHITE];
-  b->state_backup[b->moves_count].castle[BLACK] = b->castle[BLACK];
-  b->state_backup[b->moves_count].halfmove      = b->halfmove;
-  b->state_backup[b->moves_count].hash_value    = b->hash_value;
+  b->variation.plies[b->variation.plies_count]            = m;
+  b->state_backup[b->variation.plies_count].ep_possible   = b->ep_possible;
+  b->state_backup[b->variation.plies_count].ep_square     = b->ep_square;
+  b->state_backup[b->variation.plies_count].castle[WHITE] = b->castle[WHITE];
+  b->state_backup[b->variation.plies_count].castle[BLACK] = b->castle[BLACK];
+  b->state_backup[b->variation.plies_count].halfmove      = b->halfmove;
+  b->state_backup[b->variation.plies_count].hash_value    = b->hash_value;
 
-  b->moves_count++;
+  b->variation.plies_count++;
 
   if (m != NULL_MOVE)
   {
@@ -430,16 +474,16 @@ void UnmakeMove(Board *b)
 {
   b->turn = !b->turn;
 
-  b->moves_count--;
+  b->variation.plies_count--;
 
-  Move m = b->moves[b->moves_count];
+  Move m = b->variation.plies[b->variation.plies_count];
 
-  b->ep_possible   = b->state_backup[b->moves_count].ep_possible;
-  b->ep_square     = b->state_backup[b->moves_count].ep_square;
-  b->castle[WHITE] = b->state_backup[b->moves_count].castle[WHITE];
-  b->castle[BLACK] = b->state_backup[b->moves_count].castle[BLACK];
-  b->halfmove      = b->state_backup[b->moves_count].halfmove;
-  b->hash_value    = b->state_backup[b->moves_count].hash_value;
+  b->ep_possible   = b->state_backup[b->variation.plies_count].ep_possible;
+  b->ep_square     = b->state_backup[b->variation.plies_count].ep_square;
+  b->castle[WHITE] = b->state_backup[b->variation.plies_count].castle[WHITE];
+  b->castle[BLACK] = b->state_backup[b->variation.plies_count].castle[BLACK];
+  b->halfmove      = b->state_backup[b->variation.plies_count].halfmove;
+  b->hash_value    = b->state_backup[b->variation.plies_count].hash_value;
 
   if (m != NULL_MOVE)
   {

@@ -349,10 +349,13 @@ void Generate(Board *b, int side, int type, Move move_list[], int *move_count)
   if ((type & GEN_ATTACKS) == GEN_ATTACKS)
   {
     genPawnAttacks(b, move_list, move_count, side);
-    genPromotions(b, move_list, move_count, side);
     genKnight(b, move_list, move_count, side, GEN_ATTACKS);
     genSliding(b, move_list, move_count, side, GEN_ATTACKS);
     genKing(b, move_list, move_count, side, GEN_ATTACKS);
+  }
+  if ((type & GEN_PROMOTIONS) == GEN_PROMOTIONS)
+  {
+    genPromotions(b, move_list, move_count, side);
   }
   if ((type & GEN_SILENT) == GEN_SILENT)
   {

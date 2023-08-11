@@ -1,5 +1,13 @@
 #include "main.h"
 
+int PieceToHashIndex(int piece, int player)
+{
+  if (player == BLACK)
+    return piece + 6;
+  else
+    return piece;
+}
+
 int SquareAttackedBy(Board *b, int side, int sq)
 {
   BB sq_bb = SQ_TO_BB(sq);
@@ -44,7 +52,7 @@ int IsLegal(Board *b, Move m)
   return legal;
 }
 
-static void updateBitboards(Board *b)
+void updateBitboards(Board *b)
 {
   b->pieces_of[WHITE] = 0;
   b->pieces_of[BLACK] = 0;
@@ -69,6 +77,7 @@ static void updateBitboards(Board *b)
   }
 
   b->hash_value ^= precomp_hash_turn[b->turn];
+
   if (b->ep_possible) b->hash_value ^= precomp_hash_ep[ffsll(b->ep_square) - 1];
 }
 
@@ -223,17 +232,11 @@ int GetPieceAt(Board *b, BB s)
   return 0;
 }
 
-int PieceToHashIndex(int piece, int player)
-{
-  if (player == BLACK)
-    return piece + 6;
-  else
-    return piece;
-}
-
 void PrintMoveStr(char buff[], Move m)
 {
-  if (GET_TYPE(m) == MOVE_TYPE_CASTLE_K)
+  if (m == NULL_MOVE)
+    sprintf(buff, "null");
+  else if (GET_TYPE(m) == MOVE_TYPE_CASTLE_K)
     sprintf(buff, "O-O");
   else if (GET_TYPE(m) == MOVE_TYPE_CASTLE_Q)
     sprintf(buff, "O-O-O");
@@ -318,100 +321,105 @@ void MakeMove(Board *b, Move m)
 
   b->moves_count++;
 
-  b->ep_possible = 0;
-
-  int piece = GET_PIECE(m);
-
-  BB origin_bb = SQ_TO_BB(GET_ORIGIN_SQ(m));
-  BB dest_bb   = SQ_TO_BB(GET_DEST_SQ(m));
-
-  if (piece == KING)
-    b->castle[b->turn] = 0;
-  else if (piece == ROOK)
+  if (m != NULL_MOVE)
   {
-    switch (origin_bb)
+    b->ep_possible = 0;
+
+    int piece = GET_PIECE(m);
+
+    BB origin_bb = SQ_TO_BB(GET_ORIGIN_SQ(m));
+    BB dest_bb   = SQ_TO_BB(GET_DEST_SQ(m));
+
+    if (piece == KING)
+      b->castle[b->turn] = 0;
+    else if (piece == ROOK)
     {
-      case 0x10:
-        b->castle[WHITE] = 0;
+      switch (origin_bb)
+      {
+        case 0x10:
+          b->castle[WHITE] = 0;
+          break;
+        case 0x1000000000000000:
+          b->castle[BLACK] = 0;
+          break;
+        case 0x1:
+          b->castle[WHITE] &= ~CASTLE_Q;
+          break;
+        case 0x80:
+          b->castle[WHITE] &= ~CASTLE_K;
+          break;
+        case 0x100000000000000:
+          b->castle[BLACK] &= ~CASTLE_Q;
+          break;
+        case 0x8000000000000000:
+          b->castle[BLACK] &= ~CASTLE_K;
+          break;
+        default:
+          break;
+      }
+    }
+
+    switch (GET_TYPE(m))
+    {
+      case MOVE_TYPE_SILENT:
+        b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
         break;
-      case 0x1000000000000000:
-        b->castle[BLACK] = 0;
+      case MOVE_TYPE_DOUBLE_PUSH:
+        b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
+        b->ep_possible = 1;
+        b->ep_square   = b->turn == WHITE ? (dest_bb >> 8) : (dest_bb << 8);
         break;
-      case 0x1:
-        b->castle[WHITE] &= ~CASTLE_Q;
+      case MOVE_TYPE_EP:
+        b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
+        b->piece[!b->turn][PAWN] &= ~(b->turn == WHITE ? (b->ep_square >> 8) : (b->ep_square << 8));
         break;
-      case 0x80:
-        b->castle[WHITE] &= ~CASTLE_K;
+      case MOVE_TYPE_CAPTURE:
+        b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
+        b->piece[!b->turn][GET_CAPTURED_PIECE(m)] &= ~dest_bb;
+        updateCastlingAfterCapture(b, dest_bb);
         break;
-      case 0x100000000000000:
-        b->castle[BLACK] &= ~CASTLE_Q;
+      case MOVE_TYPE_PROMOTION:
+        b->piece[b->turn][PAWN] &= ~origin_bb;
+        b->piece[b->turn][GET_PROMOTION_PIECE(m)] |= dest_bb;
         break;
-      case 0x8000000000000000:
-        b->castle[BLACK] &= ~CASTLE_K;
+      case MOVE_TYPE_PROMOTION_WITH_CAPTURE:
+        b->piece[b->turn][PAWN] &= ~origin_bb;
+        b->piece[b->turn][GET_PROMOTION_PIECE(m)] |= dest_bb;
+        b->piece[!b->turn][GET_CAPTURED_PIECE(m)] &= ~dest_bb;
+        updateCastlingAfterCapture(b, dest_bb);
         break;
-      default:
+      case MOVE_TYPE_CASTLE_K:
+        if (b->turn == WHITE)
+        {
+          b->piece[b->turn][KING] = 0x40;
+          b->piece[b->turn][ROOK] ^= 0xa0;
+          b->castle[WHITE] = 0;
+        }
+        else
+        {
+          b->piece[b->turn][KING] = 0x4000000000000000;
+          b->piece[b->turn][ROOK] ^= 0xa000000000000000;
+          b->castle[BLACK] = 0;
+        }
+        break;
+      case MOVE_TYPE_CASTLE_Q:
+        if (b->turn == WHITE)
+        {
+          b->piece[b->turn][KING] = 0x4;
+          b->piece[b->turn][ROOK] ^= 0x9;
+          b->castle[WHITE] = 0;
+        }
+        else
+        {
+          b->piece[b->turn][KING] = 0x400000000000000;
+          b->piece[b->turn][ROOK] ^= 0x900000000000000;
+          b->castle[BLACK] = 0;
+        }
         break;
     }
   }
-
-  switch (GET_TYPE(m))
-  {
-    case MOVE_TYPE_SILENT:
-      b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
-      break;
-    case MOVE_TYPE_DOUBLE_PUSH:
-      b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
-      b->ep_possible = 1;
-      b->ep_square   = b->turn == WHITE ? (dest_bb >> 8) : (dest_bb << 8);
-      break;
-    case MOVE_TYPE_EP:
-      b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
-      b->piece[!b->turn][PAWN] &= ~(b->turn == WHITE ? (b->ep_square >> 8) : (b->ep_square << 8));
-      break;
-    case MOVE_TYPE_CAPTURE:
-      b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
-      b->piece[!b->turn][GET_CAPTURED_PIECE(m)] &= ~dest_bb;
-      updateCastlingAfterCapture(b, dest_bb);
-      break;
-    case MOVE_TYPE_PROMOTION:
-      b->piece[b->turn][PAWN] &= ~origin_bb;
-      b->piece[b->turn][GET_PROMOTION_PIECE(m)] |= dest_bb;
-      break;
-    case MOVE_TYPE_PROMOTION_WITH_CAPTURE:
-      b->piece[b->turn][PAWN] &= ~origin_bb;
-      b->piece[b->turn][GET_PROMOTION_PIECE(m)] |= dest_bb;
-      b->piece[!b->turn][GET_CAPTURED_PIECE(m)] &= ~dest_bb;
-      updateCastlingAfterCapture(b, dest_bb);
-      break;
-    case MOVE_TYPE_CASTLE_K:
-      if (b->turn == WHITE)
-      {
-        b->piece[b->turn][KING] = 0x40;
-        b->piece[b->turn][ROOK] ^= 0xa0;
-        b->castle[WHITE] = 0;
-      }
-      else
-      {
-        b->piece[b->turn][KING] = 0x4000000000000000;
-        b->piece[b->turn][ROOK] ^= 0xa000000000000000;
-        b->castle[BLACK] = 0;
-      }
-      break;
-    case MOVE_TYPE_CASTLE_Q:
-      if (b->turn == WHITE)
-      {
-        b->piece[b->turn][KING] = 0x4;
-        b->piece[b->turn][ROOK] ^= 0x9;
-        b->castle[WHITE] = 0;
-      }
-      else
-      {
-        b->piece[b->turn][KING] = 0x400000000000000;
-        b->piece[b->turn][ROOK] ^= 0x900000000000000;
-        b->castle[BLACK] = 0;
-      }
-      break;
-  }
+  else
+    b->ep_possible = 0;
 
   b->turn = !b->turn;
 
@@ -433,62 +441,63 @@ void UnmakeMove(Board *b)
   b->halfmove      = b->state_backup[b->moves_count].halfmove;
   b->hash_value    = b->state_backup[b->moves_count].hash_value;
 
-  b->ep_possible = 0;
-
-  int piece = GET_PIECE(m);
-
-  BB origin_bb = SQ_TO_BB(GET_ORIGIN_SQ(m));
-  BB dest_bb   = SQ_TO_BB(GET_DEST_SQ(m));
-
-  switch (GET_TYPE(m))
+  if (m != NULL_MOVE)
   {
-    case MOVE_TYPE_SILENT:
-      b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
-      break;
-    case MOVE_TYPE_DOUBLE_PUSH:
-      b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
-      break;
-    case MOVE_TYPE_EP:
-      b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
-      b->piece[!b->turn][PAWN] |= (b->turn == WHITE ? (b->ep_square >> 8) : (b->ep_square << 8));
-      break;
-    case MOVE_TYPE_CAPTURE:
-      b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
-      b->piece[!b->turn][GET_CAPTURED_PIECE(m)] |= dest_bb;
-      break;
-    case MOVE_TYPE_PROMOTION:
-      b->piece[b->turn][PAWN] |= origin_bb;
-      b->piece[b->turn][GET_PROMOTION_PIECE(m)] &= ~dest_bb;
-      break;
-    case MOVE_TYPE_PROMOTION_WITH_CAPTURE:
-      b->piece[b->turn][PAWN] |= origin_bb;
-      b->piece[b->turn][GET_PROMOTION_PIECE(m)] &= ~dest_bb;
-      b->piece[!b->turn][GET_CAPTURED_PIECE(m)] |= dest_bb;
-      break;
-    case MOVE_TYPE_CASTLE_K:
-      if (b->turn == WHITE)
-      {
-        b->piece[b->turn][KING] = 0x10;
-        b->piece[b->turn][ROOK] ^= 0xa0;
-      }
-      else
-      {
-        b->piece[b->turn][KING] = 0x1000000000000000;
-        b->piece[b->turn][ROOK] ^= 0xa000000000000000;
-      }
-      break;
-    case MOVE_TYPE_CASTLE_Q:
-      if (b->turn == WHITE)
-      {
-        b->piece[b->turn][KING] = 0x10;
-        b->piece[b->turn][ROOK] ^= 0x9;
-      }
-      else
-      {
-        b->piece[b->turn][KING] = 0x1000000000000000;
-        b->piece[b->turn][ROOK] ^= 0x900000000000000;
-      }
-      break;
+    int piece = GET_PIECE(m);
+
+    BB origin_bb = SQ_TO_BB(GET_ORIGIN_SQ(m));
+    BB dest_bb   = SQ_TO_BB(GET_DEST_SQ(m));
+
+    switch (GET_TYPE(m))
+    {
+      case MOVE_TYPE_SILENT:
+        b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
+        break;
+      case MOVE_TYPE_DOUBLE_PUSH:
+        b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
+        break;
+      case MOVE_TYPE_EP:
+        b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
+        b->piece[!b->turn][PAWN] |= (b->turn == WHITE ? (b->ep_square >> 8) : (b->ep_square << 8));
+        break;
+      case MOVE_TYPE_CAPTURE:
+        b->piece[b->turn][piece] ^= (origin_bb | dest_bb);
+        b->piece[!b->turn][GET_CAPTURED_PIECE(m)] |= dest_bb;
+        break;
+      case MOVE_TYPE_PROMOTION:
+        b->piece[b->turn][PAWN] |= origin_bb;
+        b->piece[b->turn][GET_PROMOTION_PIECE(m)] &= ~dest_bb;
+        break;
+      case MOVE_TYPE_PROMOTION_WITH_CAPTURE:
+        b->piece[b->turn][PAWN] |= origin_bb;
+        b->piece[b->turn][GET_PROMOTION_PIECE(m)] &= ~dest_bb;
+        b->piece[!b->turn][GET_CAPTURED_PIECE(m)] |= dest_bb;
+        break;
+      case MOVE_TYPE_CASTLE_K:
+        if (b->turn == WHITE)
+        {
+          b->piece[b->turn][KING] = 0x10;
+          b->piece[b->turn][ROOK] ^= 0xa0;
+        }
+        else
+        {
+          b->piece[b->turn][KING] = 0x1000000000000000;
+          b->piece[b->turn][ROOK] ^= 0xa000000000000000;
+        }
+        break;
+      case MOVE_TYPE_CASTLE_Q:
+        if (b->turn == WHITE)
+        {
+          b->piece[b->turn][KING] = 0x10;
+          b->piece[b->turn][ROOK] ^= 0x9;
+        }
+        else
+        {
+          b->piece[b->turn][KING] = 0x1000000000000000;
+          b->piece[b->turn][ROOK] ^= 0x900000000000000;
+        }
+        break;
+    }
   }
 
   updateBitboards(b);

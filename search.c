@@ -2,11 +2,12 @@
 
 #include "main.h"
 
-#define MAX_SCORE  2000000000
-#define MATE_SCORE 1000000000
+#define MAX_SCORE      2000000000
+#define MATE_SCORE     1000000000
+#define MIN_MATE_SCORE 500000000
 
-#define IS_WIN_MATE(s)  ((s) >= MATE_SCORE && (s) < MAX_SCORE)
-#define IS_LOSE_MATE(s) ((s) <= -MATE_SCORE && (s) > -MAX_SCORE)
+#define IS_WIN_MATE(s)  ((s) >= MIN_MATE_SCORE && (s) <= MATE_SCORE)
+#define IS_LOSE_MATE(s) ((s) <= -MIN_MATE_SCORE && (s) >= -MATE_SCORE)
 
 #define TT_SIZE (1024)
 
@@ -149,7 +150,7 @@ static int quiesce(Board *b, int alpha, int beta)
 }
 
 static int alphaBeta(Board *b, int alpha, int beta, int depthleft, Variation *variation,
-                     Move *best_move, Variation *pv, Variation *previous_pv)
+                     Move *best_move, Variation *pv, Variation *previous_pv, int can_null)
 {
   int original_alpha = alpha;
 
@@ -199,7 +200,28 @@ static int alphaBeta(Board *b, int alpha, int beta, int depthleft, Variation *va
     pv_move = NULL_MOVE;
   }
 
+  int in_check = IsKingAttacked(b, b->turn);
+
+  // Null move pruning
+  if (can_null && depthleft >= 4 && !in_check)
+  {
+    MakeMove(b, NULL_MOVE);
+    variation->plies[variation->plies_count] = NULL_MOVE;
+    variation->plies_count++;
+
+    int null_move_score =
+        -alphaBeta(b, -beta, 1 - beta, depthleft - 4, variation, NULL, &child_pv, previous_pv, 0);
+
+    variation->plies_count--;
+    UnmakeMove(b);
+
+    if (null_move_score >= beta) return beta;
+  }
+
   int legal_found = 0;
+
+  int any_child_failed_high = 0;
+  int reduced               = 0;
 
   for (int i = 0; i < moves_count; i++)
   {
@@ -213,8 +235,18 @@ static int alphaBeta(Board *b, int alpha, int beta, int depthleft, Variation *va
       variation->plies[variation->plies_count] = moves[i];
       variation->plies_count++;
 
-      int score =
-          -alphaBeta(b, -beta, -alpha, depthleft - 1, variation, NULL, &child_pv, previous_pv);
+      // Late move reduction
+      if (depthleft >= 3 && GET_TYPE(moves[i]) == MOVE_TYPE_SILENT && !reduced &&
+          !any_child_failed_high && legal_found > 4)
+      {
+        reduced = 1;
+        depthleft--;
+      }
+
+      int score = -alphaBeta(b, -beta, -alpha, depthleft - 1, variation, NULL, &child_pv,
+                             previous_pv, can_null);
+
+      if (score == beta) any_child_failed_high = 1;
 
       variation->plies_count--;
       UnmakeMove(b);
@@ -241,7 +273,7 @@ static int alphaBeta(Board *b, int alpha, int beta, int depthleft, Variation *va
   if (legal_found == 0)
   {
     if (IsKingAttacked(b, b->turn))
-      alpha = -MATE_SCORE - variation->plies_count;
+      alpha = -MATE_SCORE + variation->plies_count;
     else
       alpha = 0;
 
@@ -249,7 +281,7 @@ static int alphaBeta(Board *b, int alpha, int beta, int depthleft, Variation *va
   }
 
   // Save to tt
-  ttEntry->occupied    = 0;
+  /*ttEntry->occupied    = 0;
   ttEntry->depth       = depthleft;
   ttEntry->hash        = b->hash_value;
   ttEntry->moves_count = moves_count;
@@ -262,7 +294,7 @@ static int alphaBeta(Board *b, int alpha, int beta, int depthleft, Variation *va
     ttEntry->entry_type = TTENTRY_EXACT;
   for (int i = 0; i < moves_count; i++) ttEntry->moves[i] = moves[i];
   ttEntry->pv_move  = pv_move;
-  ttEntry->occupied = 1;
+  ttEntry->occupied = 1;*/
 
   return alpha;
 }
@@ -282,7 +314,7 @@ Move Search(Board *b)
     Variation pv;
 
     Move m     = 0;
-    int  score = alphaBeta(b, -MAX_SCORE, MAX_SCORE, depth, &variation, &m, &pv, &previous_pv);
+    int  score = alphaBeta(b, -MAX_SCORE, MAX_SCORE, depth, &variation, &m, &pv, &previous_pv, 1);
 
     char buff[6];
     PrintMoveStr(buff, m);

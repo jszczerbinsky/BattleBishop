@@ -36,9 +36,14 @@ static void genPawnAttacks(Board *b, Move *move_list, int *move_count, int side)
       {
         for (int i = 1; i < 5; i++)
         {
-          move_list[*move_count] =
-              CREATE_MOVE(sq + origin_direction[side][lr], sq, GetPieceAt(b, sq_bb), i, PAWN,
-                          MOVE_TYPE_PROMOTION_WITH_CAPTURE);
+          move_list[*move_count] = CREATE_MOVE(
+              sq + origin_direction[side][lr],
+              sq,
+              GetPieceAt(b, sq_bb),
+              i,
+              PAWN,
+              MOVE_TYPE_PROMOTION_WITH_CAPTURE
+          );
           (*move_count)++;
         }
       }
@@ -51,8 +56,9 @@ static void genPawnAttacks(Board *b, Move *move_list, int *move_count, int side)
         }
         else  // Normal capture
         {
-          move_list[*move_count] = CREATE_MOVE(sq + origin_direction[side][lr], sq,
-                                               GetPieceAt(b, sq_bb), 0, PAWN, MOVE_TYPE_CAPTURE);
+          move_list[*move_count] = CREATE_MOVE(
+              sq + origin_direction[side][lr], sq, GetPieceAt(b, sq_bb), 0, PAWN, MOVE_TYPE_CAPTURE
+          );
         }
         (*move_count)++;
       }

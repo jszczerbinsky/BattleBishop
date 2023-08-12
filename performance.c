@@ -59,8 +59,15 @@ void RunPerft(Board *b, int depth)
 
   clock_t start = clock();
   perft(b, depth, &result);
-  printf("Perft(%d):\ntotal:%d\neps:%d\ncaptures:%d\ncastles:%d\npromotions:%d\n\n\n", depth,
-         result.total, result.eps, result.captures, result.castles, result.promotions);
+  printf(
+      "Perft(%d):\ntotal:%d\neps:%d\ncaptures:%d\ncastles:%d\npromotions:%d\n\n\n",
+      depth,
+      result.total,
+      result.eps,
+      result.captures,
+      result.castles,
+      result.promotions
+  );
   clock_t end = clock();
 
   double time = (double)(end - start) / CLOCKS_PER_SEC;

@@ -140,8 +140,10 @@ static int quiesce(Board *b, int alpha, int beta)
   return alpha;
 }
 
-static int alphaBeta(Board *b, int alpha, int beta, int depthleft, Variation *pv,
-                     Variation *previous_pv, int can_null)
+static int alphaBeta(
+    Board *b, int alpha, int beta, int depthleft, Variation *pv, Variation *previous_pv,
+    int can_null
+)
 {
   int original_alpha = alpha;
 

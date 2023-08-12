@@ -293,15 +293,25 @@ void PrintMoveStr(char buff[], Move m)
     int dest   = GET_DEST_SQ(m);
 
     const char piece_char[] = {
-        'p', 'n', 'r', 'q', 'b', 'k',
+        'p',
+        'n',
+        'r',
+        'q',
+        'b',
+        'k',
     };
 
     sprintf(
-        buff, "%c%c%c%c%c", (origin % 8) + 'a', (origin / 8) + '1', (dest % 8) + 'a',
+        buff,
+        "%c%c%c%c%c",
+        (origin % 8) + 'a',
+        (origin / 8) + '1',
+        (dest % 8) + 'a',
         (dest / 8) + '1',
         (GET_TYPE(m) == MOVE_TYPE_PROMOTION) || (GET_TYPE(m) == MOVE_TYPE_PROMOTION_WITH_CAPTURE)
             ? piece_char[GET_PROMOTION_PIECE(m)]
-            : '\0');
+            : '\0'
+    );
   }
 }
 
@@ -331,8 +341,11 @@ void PrintBoard(Board *b)
     printf("\n");
   }
   if (b->ep_possible)
-    printf("Ep square: %c%c\n", (ffsll((long long)b->ep_square) - 1) % 8 + 'a',
-           (ffsll((long long)b->ep_square) - 1) / 8 + '1');
+    printf(
+        "Ep square: %c%c\n",
+        (ffsll((long long)b->ep_square) - 1) % 8 + 'a',
+        (ffsll((long long)b->ep_square) - 1) / 8 + '1'
+    );
 }
 
 static void updateCastlingAfterCapture(Board *b, BB dest_bb)

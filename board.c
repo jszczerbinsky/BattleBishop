@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <string.h>
+
 #include "main.h"
 
 static const int piece_value[6] = {
@@ -20,7 +23,7 @@ static int popcnt(BB b)
 {
   int sq;
   int i = 0;
-  while ((sq = ffsll(b)) != 0)
+  while ((sq = ffsll((long long)b)) != 0)
   {
     i++;
     b &= ~SQ_TO_BB(sq - 1);
@@ -84,7 +87,7 @@ int SquareAttackedBy(Board *b, int side, int sq)
 
 int IsKingAttacked(Board *b, int side)
 {
-  return SquareAttackedBy(b, !side, ffsll(b->piece[side][KING]) - 1);
+  return SquareAttackedBy(b, !side, ffsll((long long)b->piece[side][KING]) - 1);
 }
 
 int IsLegal(Board *b, Move m)
@@ -122,7 +125,7 @@ void updateBitboards(Board *b)
 
   b->hash_value ^= precomp_hash_turn[b->turn];
 
-  if (b->ep_possible) b->hash_value ^= precomp_hash_ep[ffsll(b->ep_square) - 1];
+  if (b->ep_possible) b->hash_value ^= precomp_hash_ep[ffsll((long long)b->ep_square) - 1];
 }
 
 void Startpos(Board *b)
@@ -328,8 +331,8 @@ void PrintBoard(Board *b)
     printf("\n");
   }
   if (b->ep_possible)
-    printf("Ep square: %c%c\n", (ffsll(b->ep_square) - 1) % 8 + 'a',
-           (ffsll(b->ep_square) - 1) / 8 + '1');
+    printf("Ep square: %c%c\n", (ffsll((long long)b->ep_square) - 1) % 8 + 'a',
+           (ffsll((long long)b->ep_square) - 1) / 8 + '1');
 }
 
 static void updateCastlingAfterCapture(Board *b, BB dest_bb)

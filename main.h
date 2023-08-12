@@ -37,7 +37,7 @@
 //
 
 #define SQ_TO_BB(sq) (1LL << (sq))
-#define BB_TO_SQ(sq) (ffsll(sq) - 1)
+#define BB_TO_SQ(sq) (ffsll((long long)sq) - 1)
 
 #define FLIP_SQ(sq) ((sq) ^ 56)
 

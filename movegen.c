@@ -1,6 +1,6 @@
-#include "main.h"
+#include <string.h>
 
-#define NULL 0
+#include "main.h"
 
 static void genPawnAttacks(Board *b, Move *move_list, int *move_count, int side)
 {
@@ -25,7 +25,7 @@ static void genPawnAttacks(Board *b, Move *move_list, int *move_count, int side)
 
   for (int lr = 0; lr < 2; lr++)
   {
-    while ((sq = ffsll(attacks[lr])) != 0)
+    while ((sq = ffsll((long long)attacks[lr])) != 0)
     {
       sq--;
       sq_bb = SQ_TO_BB(sq);
@@ -80,7 +80,7 @@ static void genPawnPushes(Board *b, Move *move_list, int *move_count, int side)
     pushes[1] = ((pushes[0] & 0xff0000000000) >> 8) & ~b->all_pieces;
   }
 
-  while ((sq = ffsll(pushes[0])) != 0)
+  while ((sq = ffsll((long long)pushes[0])) != 0)
   {
     const int origin_direction[2] = {-8, 8};
 
@@ -94,7 +94,7 @@ static void genPawnPushes(Board *b, Move *move_list, int *move_count, int side)
     pushes[0] &= ~sq_bb;
   }
 
-  while ((sq = ffsll(pushes[1])) != 0)
+  while ((sq = ffsll((long long)pushes[1])) != 0)
   {
     const int origin_direction[2] = {-16, 16};
 
@@ -121,7 +121,7 @@ static void genPromotions(Board *b, Move *move_list, int *move_count, int side)
   else
     promotions = (b->piece[side][PAWN] >> 8) & RANK_1 & ~b->all_pieces;
 
-  while ((sq = ffsll(promotions)) != 0)
+  while ((sq = ffsll((long long)promotions)) != 0)
   {
     const int origin_direction[2] = {-8, 8};
 
@@ -147,7 +147,7 @@ static void genKnight(Board *b, Move *move_list, int *move_count, int side, int 
 
   BB knights = b->piece[side][KNIGHT];
 
-  while ((knight = ffsll(knights)) != 0)
+  while ((knight = ffsll((long long)knights)) != 0)
   {
     knight--;
 
@@ -166,7 +166,7 @@ static void genKnight(Board *b, Move *move_list, int *move_count, int side, int 
         break;
     }
 
-    while ((sq = ffsll(destinations)) != 0)
+    while ((sq = ffsll((long long)destinations)) != 0)
     {
       sq--;
       sq_bb = SQ_TO_BB(sq);
@@ -211,7 +211,7 @@ static void genKing(Board *b, Move *move_list, int *move_count, int side, int ty
       break;
   }
 
-  while ((sq = ffsll(destinations)) != 0)
+  while ((sq = ffsll((long long)destinations)) != 0)
   {
     sq--;
     sq_bb = SQ_TO_BB(sq);
@@ -240,7 +240,7 @@ static void genSliding(Board *b, Move *move_list, int *move_count, int side, int
   {
     BB pieces = b->piece[side][p];
 
-    while ((piece = ffsll(pieces)) != 0)
+    while ((piece = ffsll((long long)pieces)) != 0)
     {
       piece--;
       BB piece_bb = SQ_TO_BB(piece);
@@ -275,7 +275,7 @@ static void genSliding(Board *b, Move *move_list, int *move_count, int side, int
           break;
       }
 
-      while ((sq = ffsll(destinations)) != 0)
+      while ((sq = ffsll((long long)destinations)) != 0)
       {
         sq--;
         sq_bb = SQ_TO_BB(sq);
